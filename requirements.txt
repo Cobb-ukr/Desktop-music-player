@@ -1,0 +1,6 @@
+# Core runtime dependency for downloading audio
+yt-dlp>=2025.1.0
+
+# Optional dev/test dependency for running pytest-based tests
+pytest>=8.0.0
+pygame>=2.0.1
