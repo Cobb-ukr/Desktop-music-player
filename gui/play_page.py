@@ -34,6 +34,7 @@ class PlayPage(tk.Frame):
         tk.Label(chooser, text="Playlist:").pack(side="left", padx=(0, 6))
         self.playlist_combo = ttk.Combobox(chooser, state="readonly", width=30)
         self.playlist_combo.pack(side="left")
+        tk.Button(chooser, text="Load", command=self.load_playlist).pack(side="left", padx=(6, 0))
         tk.Button(chooser, text="Start", command=self.start_playlist).pack(side="left", padx=6)
 
         # ----- two lists: playlist and queue -----
@@ -57,6 +58,11 @@ class PlayPage(tk.Frame):
         queue_buttons.grid(row=2, column=1, pady=(6, 0))
         tk.Button(queue_buttons, text="Remove", command=self.remove_from_queue).grid(row=0, column=0, padx=3)
         tk.Button(queue_buttons, text="Clear queue", command=self.clear_queue).grid(row=0, column=1, padx=3)
+
+        self.resume_label = tk.Label(
+            self, text="", fg="#8a5b00", font=("TkDefaultFont", 9, "bold"), wraplength=780
+        )
+        self.resume_label.pack(pady=(0, 4))
 
         # ----- now playing, seek bar, controls -----
         self.now_playing_label = tk.Label(
@@ -147,6 +153,22 @@ class PlayPage(tk.Frame):
         self.session = PlaySession(playlist)
         self.playlist_files = playlist.to_list()
         self.play_song(self.session.start())
+
+    def load_playlist(self):
+        name = self.playlist_combo.get()
+        if not name:
+            self.set_status("Choose a playlist first.")
+            return
+        playlist = self.manager.get_linked_list(name)
+        if playlist.is_empty():
+            self.set_status(f'"{name}" is empty. Add songs to it in "Create / edit playlists".')
+            return
+        self.stop_playback()
+        self.session = PlaySession(playlist)
+        self.playlist_files = playlist.to_list()
+        self.session.start()
+        self.refresh_all()
+        self.set_status(f'Loaded playlist "{name}". Press Start to play it, or queue songs from the list.')
 
     def play_song(self, filename):
         """Play `filename`. Returns False (and stops) if it can't be played."""
@@ -292,12 +314,37 @@ class PlayPage(tk.Frame):
         playing_index = None
         if self.session is not None and self.player.state != "stopped":
             playing_index = self.session.playing_index()
+
+        resume_index = None
+        if self.session is not None and self.playlist_files:
+            resume_index = self.session.playlist.current_index()
+            if resume_index is not None:
+                resume_index = (resume_index + 1) % len(self.playlist_files)
+
         self.playlist_listbox.delete(0, tk.END)
         for index, filename in enumerate(self.playlist_files):
-            marker = "▶ " if index == playing_index else "    "
-            self.playlist_listbox.insert(tk.END, f"{marker}{index + 1}. {library.display_name(filename)}")
+            marker = "    "
+            if index == playing_index:
+                marker = "▶ "
+            elif resume_index is not None and index == resume_index:
+                marker = "↳ "
+
+            item_text = f"{marker}{index + 1}. {library.display_name(filename)}"
+            self.playlist_listbox.insert(tk.END, item_text)
         if selection and selection[0] < len(self.playlist_files):
             self.playlist_listbox.selection_set(selection[0])
+
+        if self.session is not None and self.playlist_files:
+            if resume_index is not None:
+                label_text = library.display_name(self.playlist_files[resume_index])
+                if self.session.from_queue:
+                    self.resume_label.config(text=f"Playlist resumes at: {label_text}")
+                else:
+                    self.resume_label.config(text=f"Next playlist song: {label_text}")
+            else:
+                self.resume_label.config(text="")
+        else:
+            self.resume_label.config(text="")
 
     def refresh_queue(self):
         self.queue_listbox.delete(0, tk.END)
